@@ -1,7 +1,7 @@
 #ifndef PARSER_HEADER 
 #define PARSER_HEADER
 #include "lexer.h"
-#define DEBUG 1
+#define DEBUG 0
 
 void parse(); 
 void match(TOKEN token, char *lex);

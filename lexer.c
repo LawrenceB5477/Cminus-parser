@@ -130,7 +130,7 @@ int skipSpace() {
     if (buffer[bufferPos] == '\0') {
         int result = readNextLine(); 
         while (result != EOF) {
-            printf("INPUT: %s\n", buffer); 
+            //printf("INPUT: %s\n", buffer); 
             
             //Chew up all beginning white space 
             while (isspace(buffer[bufferPos])) {
@@ -160,7 +160,7 @@ TOKEN_STRUCT* nextToken(void) {
             token->token = ENDFILE;
             return token; 
         } else {
-            printf("INPUT: %s\n", buffer); 
+            //printf("INPUT: %s\n", buffer); 
         }
     }
 

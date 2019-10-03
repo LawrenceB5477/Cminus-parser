@@ -1,2 +1,2 @@
 #!/bin/sh
-./main $1
+./main input.txt

@@ -1,0 +1,23 @@
+C- Parser 
+Project 2 
+Construction of Language Translators 
+COP 4991
+Lawrence Beutlich 
+Roger Eggen 
+Due 10/3/2019
+Submitted 10/3/2019
+
+The project is a standard predictive recursive descent parser for the 
+C- language that uses a single token of look-ahead. The main 
+driving function for the project is the parse function, which 
+calls the "program" function which represents the first 
+production rule in the context free grammar of the C- language. 
+The program uses a global variable named nextToken that contains 
+the current token of input being processed, and this token 
+is what drives the program. The program uses a function called match that
+determines if the token enum passed and the string passed match the current token, 
+and if so, advances the current token to the next token. If the 
+current token is not matched, the program prints REJECT and exits. 
+Each nonterminal of the context free grammar of C- is modeled 
+as a function, and the first and follow sets are used to determine 
+which production rule to apply for each nonterminal. 

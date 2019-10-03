@@ -1,40 +1,40 @@
 --- fixed grammar --- 
 
-program -> declaration-list                                                                         {}
-declaration-list -> declaration declaration-list`                                                   {}
-declaration-list` -> declaration declaration-list` | empty                                          {}
-declaration -> type-specifier ID declaration`                                                       {}
-declaration` -> var-declaration` | ( params ) compound-stmt                                         { ( or ; [ }
-var-declaration -> type-specifier ID var-declaration`                                               { }
-var-declaration` -> ; | [ NUM ] ;                                                                   { ; or [ }
-type-specifier -> int | void                                                                        { int void }
-params -> int ID param` param-list` | void params`                                                  { int or void }
-params` -> ID param` param-list` | empty                                                            { ID or empty }
-param-list` -> , type-specifier ID param` param-list` | empty                                       { , or empty }
-param` -> [ ] | empty                                                                               { [ or empty}
-compound-stmt -> { local-declarations statement-list }                                              { { }
-local-declarations -> var-declaration local-declarations | empty                                    { int or void}
-statement-list -> statement statement-list | empty                                                  { empty or }
-statement -> expression-stmt | compound-stmt | selection-stmt | iteration-stmt | return-stmt        { else | { | if | while | return } 
-expression-stmt -> expression ; | ;                                                                 
-selection-stmt -> if ( expression ) statmement selection-stmt`                                     
-selection-stmt` -> else statement | empty                                                           
-iteration-stmt -> while ( expression ) statement                                                   
-return-stmt -> return return-stmt`                                                                  
-return-stmt` -> ; | expression ;      
-expression ->  NUM term` additive-expression` simple-expression` | ( expression ) term` additive-expression` simple-expression` | ID  expression`      
-expression` -> = expression | [ expression ] expression`` | term` additive-expression` simple-expression`  | ( args ) term` additive-expression` simple-expression` 
-expression`` -> = expression | term` additive-expression` simple-expression`  
-simple-expression` -> relop additive-expression | empty                                          
-relop -> <= | < | > | >= | == | !=                                                                
-additive-expression -> term additive-expression`                                                    
-additive-expression` -> addop term additive-expression` | empty                                    
-addop -> + | -                                                                                     
-term -> factor term`                                                                               
-term` -> mulop factor term` | empty                                                                
-mulop -> * | /                                                                                     
-factor -> ( expression ) | ID factor` | NUM    
-factor` -> [ expression ] | empty | ( args )                                                    
-args -> arg-list | empty                                                                           
-arg-list -> expression arg-list`                                                                    
-arg-list` -> , expression arg-list` | empty    
+* program -> declaration-list                                                                         { int void }                            { $ }
+* declaration-list -> declaration declaration-list`                                                   { int void }                            { $ }
+* declaration-list` -> declaration declaration-list` | empty                                          { int void empty }                      { $ }
+* declaration -> type-specifier ID declaration`                                                       { int void }                            { int void $ } 
+* declaration` -> var-declaration` | ( params ) compound-stmt                                         { ( ; [ }                               { int void $ }
+* var-declaration -> type-specifier ID var-declaration`                                               { int void }                            { int void }
+* var-declaration` -> ; | [ NUM ] ;                                                                   { ; [ }                                 { int void $ }
+* type-specifier -> int | void                                                                        { int void }                            { ID }
+* params -> int ID param` param-list` | void params`                                                  { int void }                            { ) }
+* params` -> ID param` param-list` | empty                                                            { ID empty }                            { ) }
+* param-list` -> , type-specifier ID param` param-list` | empty                                       { , empty }                             { ) }
+* param` -> [ ] | empty                                                                               { [ empty }                             { , ) }
+* compound-stmt -> { local-declarations statement-list }                                              { { }                                   { } }
+* local-declarations -> var-declaration local-declarations | empty                                    { int void }                            { NUM ID ( ; { if while return } }
+* statement-list -> statement statement-list | empty                                                    { NUM ID ( ; { if while return empty }  { } }
+* statement -> expression-stmt | compound-stmt | selection-stmt | iteration-stmt | return-stmt          { NUM ID ( ; { if while return }        { NUM ID ( ; { if while return } }
+* expression-stmt -> expression ; | ;                                                                   { NUM ID ( ; }                          { NUM ID ( ; { if while return } }
+* selection-stmt -> if ( expression ) statmement selection-stmt`                                      { if }                                  { NUM ID ( ; { if while return } }
+* selection-stmt` -> else statement | empty                                                             { else empty }                          { NUM ID ( ; { if while return } }
+* iteration-stmt -> while ( expression ) statement                                                    { while }                               { NUM ID ( ; { if while return } }
+* return-stmt -> return return-stmt`                                                                  { return }                              { NUM ID ( ; { if while return } }
+* return-stmt` -> ; | expression ;                                                                      { ; NUM (  ID }                         { NUM ID ( ; { if while return } }
+* expression ->  NUM term` additive-expression` simple-expression` | ( expression ) term` additive-expression` simple-expression` | ID  expression`                    { NUM ( ID }          { , ) ; ] } 
+* expression` -> = expression | [ expression ] expression`` | term` additive-expression` simple-expression`  | ( args ) term` additive-expression` simple-expression`  { = [ * / + - ( <= < > >= == != empty }   { , ) ; ] }
+expression`` -> = expression | term` additive-expression` simple-expression`                        { = * / + - <= < > >= == != empty }                         { , ) ; ] }
+* simple-expression` -> relop additive-expression | empty                                             { <= < > >= == != empty }               { , ) ; ] }
+* relop -> <= | < | > | >= | == | !=                                                                  { <= < > >= == != }                     { NUM ID ( }
+* additive-expression -> term additive-expression`                                                    { NUM ID ( }                            { , ) ; ] }
+* additive-expression` -> addop term additive-expression` | empty                                     { + - empty }                           {  <= < > >= == != , ) ; ] NUM ( ID }
+* addop -> + | -                                                                                      { + - }                                 { NUM ID ( }
+* term -> factor term`                                                                                { NUM ID ( }                            { + - <= < > >= == != , ) ; ] NUM ( ID }                                                   
+* term` -> mulop factor term` | empty                                                                 { * / empty }                           { + - <= < > >= == != , ) ; ] NUM ( ID }
+* mulop -> * | /                                                                                      { * / }                                 { NUM ID ( }
+* factor -> ( expression ) | ID factor` | NUM                                                         { NUM ID ( }                            { * / + - <= < > >= == != , ) ; ] NUM ( ID }
+* factor` -> [ expression ] | empty | ( args )                                                        { [ ( empty }                           { * / + - <= < > >= == != , ) ; ] NUM ( ID }
+* args -> arg-list | empty                                                                            { NUM ( ID }                            { ) }
+* arg-list -> expression arg-list`                                                                    { NUM ( ID }                            { ) }
+* arg-list` -> , expression arg-list` | empty                                                         { , empty }                             { ) }
