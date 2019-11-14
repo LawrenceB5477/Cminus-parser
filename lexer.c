@@ -222,7 +222,7 @@ TOKEN_STRUCT* nextToken(void) {
                     state = FINISH; 
                 }
                 break; 
-            // >, <, and = may be part of a two character symbol
+            // >, <, and = may be part of a to character symbol
             case LT:
             case GT:
             case EQ: 

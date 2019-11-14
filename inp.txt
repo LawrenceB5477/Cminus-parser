@@ -1,0 +1,24 @@
+int thing; 
+int thingy[4]; 
+int a; 
+
+
+void whatever() {
+
+
+}
+
+int test(void) {
+}
+
+void funcTest(int a[], int b, int c) {
+    int apples;
+    int bananas; 
+    int array[4];
+
+    {
+        int naners; 
+    }
+}
+
+this is a test`

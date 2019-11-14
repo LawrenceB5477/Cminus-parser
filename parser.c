@@ -2,10 +2,203 @@
 
 extern FILE* inputFile; 
 
+unsigned hash_value(char *id) {
+    unsigned hash = 0; 
+    while (*id) {
+        hash = (hash << 4) + *id; 
+        id++; 
+    }
+    return hash % 211; 
+}
+
+void free_symbol(SYMBOL_ENTRY *sym) {
+    free(sym->id); 
+    if (sym->arguments != NULL) {
+        SYMBOL_ENTRY *arg = sym->arguments; 
+        while (sym->arguments != NULL) {
+            arg = sym->arguments->arguments; 
+            free(sym->arguments); 
+            sym->arguments = arg; 
+        }
+    }
+    if (sym->sibling != NULL) {
+        free_symbol(sym->sibling); 
+    }
+    free(sym); 
+}
+
+SYMBOL_ENTRY *create_symbol(char *id, SYMBOL_TYPE symType, TYPE type, SYMBOL_ENTRY *args) {
+    SYMBOL_ENTRY *sym = malloc(sizeof(SYMBOL_ENTRY)); 
+    sym->id = id; 
+    sym->symType = symType; 
+    sym->type = type; 
+    sym->arguments = args; 
+    sym->sibling = NULL; 
+    return sym; 
+}
+
+SYMBOL_ENTRY *copy_symbol(SYMBOL_ENTRY *entry) {
+    SYMBOL_ENTRY *sym = malloc(sizeof(SYMBOL_ENTRY)); 
+    char *idcopy = malloc(sizeof(char) * (strlen(entry->id) + 1)); 
+    strcpy(idcopy, entry->id); 
+    return create_symbol(idcopy, entry->symType, entry->type, NULL); 
+}
+
+SYMBOL_TABLE *create_symbol_table(SYMBOL_ENTRY *context) {
+    SYMBOL_TABLE *table = malloc(sizeof(SYMBOL_TABLE)); 
+    table->next = NULL; 
+    table->array = malloc(sizeof(SYMBOL_ENTRY) * 211);
+    table->context = context; 
+    for (int i = 0; i < 211; i++) {
+        table->array[i] = NULL; 
+    }
+    return table; 
+}
+
+SYMBOL_TABLE* push_symbol_table(SYMBOL_TABLE *table, SYMBOL_ENTRY *context) {
+    SYMBOL_TABLE *next = create_symbol_table(context);  
+    next->next = table;
+    return next; 
+}
+
+void free_symbol_table(SYMBOL_TABLE *table) {
+    for (int i = 0; i < 211; i++) {
+        if (table->array[i] != NULL) {
+            free_symbol(table->array[i]); 
+        }
+    }
+    free(table->array);
+    if (table->context != NULL) {
+        free_symbol(table->context); 
+    } 
+    free(table); 
+}
+
+SYMBOL_TABLE* pop_symbol_table(SYMBOL_TABLE *table) {
+    if  (table->next == NULL) {
+        fprintf(stderr, "Symbol table error, critcal failure\n"); 
+        exit(1); 
+    }
+
+    SYMBOL_TABLE *temp = table->next; 
+    free_symbol_table(table); 
+    return temp;
+}
+
+
+void free_symbol_table_chain(SYMBOL_TABLE *head) {
+    SYMBOL_TABLE *temp = head; 
+    while (head != NULL) {
+        temp = head->next; 
+        free_symbol_table(head); 
+        head = temp; 
+    }
+}
+
+void insert_sym_table(SYMBOL_TABLE *table, SYMBOL_ENTRY *sym) {
+    unsigned index = hash_value(sym->id); 
+    if (table->array[index] == NULL) {
+        table->array[index] = sym; 
+    } else {
+        sym->sibling = table->array[index];
+        table->array[index] = sym; 
+    }
+
+}
+
+SYMBOL_ENTRY *lookup_symbol(SYMBOL_TABLE *table, char *id) {
+    SYMBOL_TABLE *walk = table; 
+    SYMBOL_ENTRY *res = NULL; 
+
+    while (walk != NULL) {
+        unsigned index = hash_value(id); 
+        if (table->array[index] !=  NULL) {
+            res = table->array[index]; 
+            while (res != NULL && strcmp(res->id, id) != 0) {
+                res = res->sibling; 
+            }
+            
+            if (res != NULL && strcmp(res->id, id) == 0) {
+                return res; 
+            } else {
+                res = NULL; 
+            }
+        }
+
+        walk = walk->next; 
+    }
+
+    return res; 
+}
+
+SYMBOL_ENTRY *lookup_symbol_local(SYMBOL_TABLE *table, char *id) {
+    SYMBOL_ENTRY *res = NULL; 
+
+    unsigned index = hash_value(id); 
+
+    if (table->array[index] !=  NULL) {
+        res = table->array[index]; 
+        while (res != NULL && strcmp(res->id, id) != 0) {
+            res = res->sibling; 
+        }
+        
+        if (res != NULL && strcmp(res->id, id) == 0) {
+            return res; 
+        } else {
+            res = NULL; 
+        }
+    }    
+
+    return res; 
+}
+    
+
+void print_symbol_table(SYMBOL_TABLE *table) {
+    printf("\n---SYMBOL TABLE DUMP--- \n");
+    while (table != NULL) {
+        printf("---------------------\n\n"); 
+        if (table->context != NULL) {
+            printf("Context: %s ", table->context->id); 
+            printf("Type: %d\n\n", table->context->type);
+        }
+        for (int i = 0; i < 211; i++) {
+            if (table->array[i] != NULL) {
+                SYMBOL_ENTRY *walk = table->array[i]; 
+           
+                while (walk != NULL) {
+                    printf("%s - type: %d - symtype: %d", walk->id, walk->type, walk->symType); 
+                    if (walk->symType == FUNC) {
+                        printf(" ARGS: "); 
+                        SYMBOL_ENTRY *arg = walk->arguments; 
+                        while (arg != NULL) {
+
+                            if (arg->id != NULL) {
+                                printf(" -- ARG ID: %s ", arg->id); 
+                            }
+                            printf(" - type: %d - ", arg->type); 
+                            printf("symtype: %d ", arg->symType); 
+                            arg = arg->arguments; 
+                        }
+                    }
+                    walk = walk->sibling; 
+                    if (walk != NULL) {
+                        printf(" ---> "); 
+                    }
+                }
+                printf("\n"); 
+            }
+        }
+        table = table->next; 
+    }
+}
+
 TOKEN_STRUCT *currentToken; 
 TOKEN_STRUCT *testToken; 
+SYMBOL_TABLE *table;  
 
-void match(TOKEN token, char *lex) {
+
+char* match(TOKEN token, char *lex) {
+    //printf("Matching: %s\n", lex); 
     if (currentToken->token == token) {
         if (token == SYMBOL || token == KEYWORD) {
             if (strcmp(currentToken->lexeme, lex) != 0) {
@@ -14,8 +207,10 @@ void match(TOKEN token, char *lex) {
             }
         } 
         
+        char *str = currentToken->lexeme; 
         free(currentToken); 
         currentToken = nextToken(); 
+        return str; 
     } else {
         printf("REJECT\n");
         exit(1); 
@@ -30,8 +225,17 @@ void parse(char *fileName) {
         exit(1); 
     }
 
+    table = create_symbol_table(NULL); 
+
     currentToken = nextToken();
-    program(); 
+    program();
+
+    printf("\n---------SYMBOL TABLE --------\n"); 
+    print_symbol_table(table);
+    if (currentToken->token != ENDFILE) {
+        printf("REJECT\n"); 
+        exit(1); 
+    }
     fclose(inputFile);
 }
 
@@ -59,6 +263,7 @@ void program(void) {
 
     declaration_list(); 
 }
+
 void declaration_list(void) {
     debug("declaration-list");
     declaration();
@@ -74,108 +279,174 @@ void declaration_list_prime(void) {
     }
 }
 
+//This is where we add ids to the symbol table 
 void declaration(void) {
     debug("declaration");
 
-    type_specifier(); 
-    match(ID, NULL);
-    declaration_prime(); 
+    TYPE type = type_specifier(); 
+    char *id = match(ID, NULL);
+
+    //If we already have this identifier 
+    if (lookup_symbol_local(table, id) != NULL) {
+        printf("REJECT\n");
+        print_symbol_table(table); 
+        exit(1); 
+    } 
+
+    SYMBOL_ENTRY *entry = create_symbol(id, 0, type, NULL); 
+    declaration_prime(entry); 
+
+    //Void variables, not possible 
+    if (type == VOID && entry->symType != FUNC) {
+        printf("Cannot have void variables!\n"); 
+        printf("REJET\n"); 
+        exit(1); 
+    }
+    insert_sym_table(table, entry); 
 }
 
-void declaration_prime(void) {
+void declaration_prime(SYMBOL_ENTRY *entry) {
     debug("declaration-prime"); 
 
     if (compareToken(SYMBOL, "(")) {
         match(SYMBOL, "(");
-        params(); 
+        params(entry); 
         match(SYMBOL, ")");
-        compound_stmt(); 
+        entry->symType = FUNC; 
+        compound_stmt(entry); 
     } else {
-        var_declaration_prime(); 
+        var_declaration_prime(entry); 
     }
 }
 
+//TODO come back to this
 void var_declaration(void) {
     debug("var-declaration"); 
 
-    type_specifier(); 
-    match(ID, NULL); 
-    var_declaration_prime(); 
+    TYPE type = type_specifier(); 
+    char *id = match(ID, NULL); 
+
+    if (type == VOID || lookup_symbol_local(table, id) != NULL) {
+        printf("POSSIBLE CONFLICT\n");
+        printf("REJECT\n");
+        exit(1); 
+    }
+
+    SYMBOL_ENTRY *entry = create_symbol(id, VAR, type, NULL); 
+    var_declaration_prime(entry); 
+    insert_sym_table(table, entry); 
 } 
 
-void var_declaration_prime(void) {
+void var_declaration_prime(SYMBOL_ENTRY *entry) {
     debug("var-declaration-prime");
 
      if (compareToken(SYMBOL, ";")) {
         match(SYMBOL, ";"); 
+        entry->symType = VAR; 
     } else {
         match(SYMBOL, "[");
         match(NUM, NULL); 
         match(SYMBOL, "]");
         match(SYMBOL, ";"); 
+        entry->symType = ARRAY; 
     }
 } 
 
-void type_specifier(void) {
+TYPE type_specifier(void) {
     debug("type-specifier"); 
 
     if (compareToken(KEYWORD, "int")) {
         match(KEYWORD, "int"); 
+        return INT; 
     } else {
-        match(KEYWORD, "void"); 
+        match(KEYWORD, "void");
+        return VOID;  
     }
 } 
 
-void params(void) {
+void params(SYMBOL_ENTRY *entry) {
     debug("params"); 
 
     if (compareToken(KEYWORD, "int")) {
         match(KEYWORD, "int"); 
-        match(ID, NULL); 
-        param_prime(); 
-        param_list_prime(); 
+        char *id = match(ID, NULL); 
+        SYMBOL_ENTRY *arg = create_symbol(id, VAR, INT, NULL); 
+        entry->arguments = arg; 
+        param_prime(arg); 
+        param_list_prime(arg); 
     } else {
         match(KEYWORD, "void");
+        SYMBOL_ENTRY *arg = create_symbol(NULL, VAR, VOID, NULL); 
+        entry->arguments = arg;
         params_prime(); 
     }
 }
 
+//We should never have any params after void! 
 void params_prime(void) {
     debug("params-prime"); 
 
     if (compareToken(ID, NULL)) {
+        printf("REJECT\n"); 
+        exit(1); 
+
         match(ID, NULL); 
-        param_prime(); 
-        param_list_prime(); 
+        param_prime(NULL); 
+        param_list_prime(NULL); 
     }
 }
 
-void param_list_prime(void) {
+void param_list_prime(SYMBOL_ENTRY *arg) {
     debug("param-list-prime"); 
 
     if (compareToken(SYMBOL, ",")) {
         match(SYMBOL, ",");
-        type_specifier(); 
-        match(ID, NULL); 
-        param_prime(); 
-        param_list_prime(); 
+        TYPE type = type_specifier(); 
+        char *id = match(ID, NULL);
+        //Cannot have null params! 
+        if (type == VOID) {
+            printf("VOID PARAM! NOT ALLOWED!\n"); 
+            printf("REJECT\n");
+            exit(1); 
+        } 
+        SYMBOL_ENTRY *nextArg = create_symbol(id, VAR, type, NULL); 
+        arg->arguments = nextArg; 
+        param_prime(nextArg); 
+        param_list_prime(nextArg); 
     }
 } 
 
-void param_prime(void) {
+void param_prime(SYMBOL_ENTRY *param) {
     debug("param-prime"); 
     if (compareToken(SYMBOL, "[")) {
+        param->symType = ARRAY; 
         match(SYMBOL, "[");
         match(SYMBOL, "]"); 
     }
 }
 
-void compound_stmt(void) {
+// ------------------- HOLD THE LINE ----------------
+
+//Creates a new symbol table and pops it when it's done with it!
+void compound_stmt(SYMBOL_ENTRY *entry) {
     debug("compound-stmt");
 
     match(SYMBOL, "{");
+  
+    table = push_symbol_table(table, copy_symbol(entry));
+
+    SYMBOL_ENTRY *walk = entry->arguments; 
+    while (walk != NULL && walk->type != VOID) {
+        insert_sym_table(table, copy_symbol(walk)); 
+        walk = walk->arguments; 
+    } 
+ 
     local_declarations(); 
+
     statement_list(); 
+
+    print_symbol_table(table); 
+    table = pop_symbol_table(table); 
     match(SYMBOL, "}");
 }
 
@@ -209,7 +480,7 @@ void statement(void) {
     if (compareToken(SYMBOL, "(") || compareToken(ID, NULL) || compareToken(NUM, NULL) || compareToken(SYMBOL, ";")) {
         expression_stmt(); 
     } else if (compareToken(SYMBOL, "{")) {
-        compound_stmt(); 
+        compound_stmt(table->context); 
     } else if (compareToken(KEYWORD, "if")) {
         selection_stmt(); 
     } else if (compareToken(KEYWORD, "while")) {
@@ -278,7 +549,7 @@ void return_stmt_prime(void) {
     }
 }
 
-void expression(void) {
+TYPE expression(void) {
     debug("expression"); 
 
         // ( ID NUM use this for expression
@@ -300,6 +571,7 @@ void expression(void) {
     }
 }
 
+//USED FOR identifiers!
 void expression_prime(void) {
     debug("expression`");
 
@@ -325,6 +597,7 @@ void expression_prime(void) {
     }
 }
 
+//Also used for identifiers 
 void expression_prime_prime(void) {
     debug("expression``");
 
@@ -338,7 +611,7 @@ void expression_prime_prime(void) {
     }
 }
 
-void simple_expression_prime(void) {
+TYPE simple_expression_prime(void) {
     debug("simple-expression`");
 
     if (compareToken(SYMBOL, "<=") || compareToken(SYMBOL, "<") || compareToken(SYMBOL, ">") || compareToken(SYMBOL, ">=")
@@ -420,54 +693,99 @@ void mulop(void) {
     }
 }
 
-void factor(void) {
+
+//Actual values! 
+TYPE factor(void) {
     debug("factor");
 
     if (compareToken(NUM, NULL)) {
         match(NUM, NULL); 
+        return INT; 
     } else if (compareToken(ID, NULL)) {
-        match(ID, NULL); 
-        factor_prime(); 
+        char *id = match(ID, NULL); 
+        SYMBOL_ENTRY *entry = lookup_symbol(table, id); 
+        if (entry == NULL) {
+            return ERROR; 
+        }
+        TYPE type = factor_prime(entry); 
     } else {
         match(SYMBOL, "(");
-        expression(); 
+        TYPE type = expression(); 
         match(SYMBOL, ")");
+        return type; 
     }
 }
-void factor_prime(void) {
+TYPE factor_prime(SYMBOL_ENTRY *entry) {
     debug("factor`");
 
     if (compareToken(SYMBOL, "[")) {
+        if (entry->symType != ARRAY) {
+            return ERROR; 
+        }
+
         match(SYMBOL, "[");
-        expression(); 
+        TYPE type = expression(); 
+        if (type != INT) {
+            return ERROR; 
+        }
         match(SYMBOL, "]");
+        return entry->type; 
     } else if (compareToken(SYMBOL, "(")) {
+        if (entry->symType != FUNC) {
+            return ERROR; 
+        }
         match(SYMBOL, "(");
-        args(); 
+        bool paramsMatch = args(entry); 
         match(SYMBOL, ")");
+        if (paramsMatch) {
+            return entry->type; 
+        } else {
+            return ERROR; 
+        }
     }
 }
 
-void args(void) {
+bool args(SYMBOL_ENTRY *entry) {
     debug("args");
 
     if (compareToken(ID, NULL) || compareToken(NUM, NULL) || compareToken(SYMBOL, "(")) {
-        arg_list(); 
+        return arg_list(entry); 
+    }
+
+    if (entry->arguments->type == VOID) {
+        return true; 
+    } else {
+        return false; 
     }
 } 
-void arg_list(void) {
+
+bool arg_list(SYMBOL_ENTRY *entry) {
     debug("args-list");
 
-    expression(); 
-    arg_list_prime(); 
+    TYPE type = expression(); 
+    if (type == entry->arguments->type) {
+        return arg_list_prime(entry->arguments->arguments); 
+    } else {
+        return false; 
+    }
 }
 
-void arg_list_prime(void) { 
+bool arg_list_prime(SYMBOL_ENTRY *entry) { 
     debug("arg-list`");
 
     if (compareToken(SYMBOL, ",")) {
         match(SYMBOL, ","); 
-        expression(); 
-        arg_list_prime(); 
+        TYPE type = expression(); 
+        if (type == entry->type) {
+            return arg_list_prime(entry->arguments); 
+        } else {
+            return false; 
+        }
+    }
+
+    if (entry == NULL) {
+        return true; 
+    } else {
+        return false; 
     }
 }
