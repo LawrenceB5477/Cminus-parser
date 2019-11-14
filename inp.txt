@@ -3,22 +3,46 @@ int thingy[4];
 int a; 
 
 
-void whatever() {
 
-
+void test(void) {
+    return ; 
 }
 
-int test(void) {
+int otherFunction(int a, int b) {
+    return thing;
 }
 
 void funcTest(int a[], int b, int c) {
     int apples;
     int bananas; 
     int array[4];
+    thingy[5];
+    array[otherFunction(1 + 3 + ( array[3] + otherFunction(thingy[1], 3)), 2)];
+
+    if (1 + 4 * 8) {
+        int local; 
+        local = 4 * array[2]; 
+        local; 
+    } else {
+        int inelse; 
+        inelse; 
+        return ; 
+    }
+
+    if (1)
+        if (2) {
+            int shallow;
+        }
+        
+
+    //shallow + 5; 
 
     {
         int naners; 
     }
 }
 
-this is a test`
+
+void main(int a) {
+    return ; 
+}

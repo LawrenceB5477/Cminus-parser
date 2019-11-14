@@ -112,8 +112,10 @@ SYMBOL_ENTRY *lookup_symbol(SYMBOL_TABLE *table, char *id) {
 
     while (walk != NULL) {
         unsigned index = hash_value(id); 
-        if (table->array[index] !=  NULL) {
-            res = table->array[index]; 
+
+        if (walk->array[index] !=  NULL) {
+            res = walk->array[index]; 
+        
             while (res != NULL && strcmp(res->id, id) != 0) {
                 res = res->sibling; 
             }
@@ -156,7 +158,7 @@ SYMBOL_ENTRY *lookup_symbol_local(SYMBOL_TABLE *table, char *id) {
 void print_symbol_table(SYMBOL_TABLE *table) {
     printf("\n---SYMBOL TABLE DUMP--- \n");
     while (table != NULL) {
-        printf("---------------------\n\n"); 
+        printf("-----------------------\n\n"); 
         if (table->context != NULL) {
             printf("Context: %s ", table->context->id); 
             printf("Type: %d\n\n", table->context->type);
@@ -190,11 +192,15 @@ void print_symbol_table(SYMBOL_TABLE *table) {
         }
         table = table->next; 
     }
+    printf("\n------END TABLE DUMP------\n\n");
 }
 
 TOKEN_STRUCT *currentToken; 
 TOKEN_STRUCT *testToken; 
 SYMBOL_TABLE *table;  
+SYMBOL_ENTRY *latestDeclaration; 
+TYPE latestReturn; 
+bool invalidReturn; 
 
 
 char* match(TOKEN token, char *lex) {
@@ -230,8 +236,14 @@ void parse(char *fileName) {
     currentToken = nextToken();
     program();
 
-    printf("\n---------SYMBOL TABLE --------\n"); 
-    print_symbol_table(table);
+    printf("final declaration: %s \n", latestDeclaration->id); 
+
+    if (latestDeclaration != NULL && strcmp(latestDeclaration->id, "main") != 0 ||
+     latestDeclaration->type != VOID || latestDeclaration->arguments->type != VOID) {
+        printf("REJECT\n");
+        exit(1); 
+    }
+
     if (currentToken->token != ENDFILE) {
         printf("REJECT\n"); 
         exit(1); 
@@ -303,6 +315,25 @@ void declaration(void) {
         exit(1); 
     }
     insert_sym_table(table, entry); 
+
+    if (entry->symType == FUNC) {
+        if (invalidReturn) {
+            printf("Invalid return yo\n"); 
+            printf("REJECT\n");
+            exit(1); 
+        }
+        if (entry->type != VOID && entry->type != latestReturn) {
+            printf("Invalid return yooo\n"); 
+            printf("REJECT\n");
+            exit(1); 
+        }
+
+        latestReturn = ERROR; 
+    }
+
+    latestDeclaration = entry;
+
+
 }
 
 void declaration_prime(SYMBOL_ENTRY *entry) {
@@ -313,7 +344,7 @@ void declaration_prime(SYMBOL_ENTRY *entry) {
         params(entry); 
         match(SYMBOL, ")");
         entry->symType = FUNC; 
-        compound_stmt(entry); 
+        compound_stmt(entry);            
     } else {
         var_declaration_prime(entry); 
     }
@@ -435,12 +466,15 @@ void compound_stmt(SYMBOL_ENTRY *entry) {
   
     table = push_symbol_table(table, copy_symbol(entry));
 
+
     SYMBOL_ENTRY *walk = entry->arguments; 
     while (walk != NULL && walk->type != VOID) {
         insert_sym_table(table, copy_symbol(walk)); 
         walk = walk->arguments; 
     } 
- 
+
+    print_symbol_table(table); 
+
     local_declarations(); 
 
     statement_list(); 
@@ -478,8 +512,10 @@ void statement(void) {
     debug("statement"); 
 
     if (compareToken(SYMBOL, "(") || compareToken(ID, NULL) || compareToken(NUM, NULL) || compareToken(SYMBOL, ";")) {
+        //DONE
         expression_stmt(); 
     } else if (compareToken(SYMBOL, "{")) {
+        //DONE ? 
         compound_stmt(table->context); 
     } else if (compareToken(KEYWORD, "if")) {
         selection_stmt(); 
@@ -490,6 +526,7 @@ void statement(void) {
     }
 }
 
+//IGNORE RETURN VALUE OF EXPRESSION STMT
 void expression_stmt(void) {
     debug("expression-stmt");
 
@@ -506,7 +543,12 @@ void selection_stmt(void) {
 
     match(KEYWORD, "if");
     match(SYMBOL, "(");
-    expression(); 
+    TYPE type = expression(); 
+    if (type != INT) {
+        printf("ERROR! expression must be int\n");
+        printf("REJECT\n");
+        exit(1); 
+    }
     match(SYMBOL, ")");
     statement(); 
     selection_stmt_prime(); 
@@ -526,7 +568,12 @@ void iteration_stmt(void) {
 
     match(KEYWORD, "while"); 
     match(SYMBOL, "(");
-    expression(); 
+    TYPE type = expression(); 
+    if (type != INT) {
+        printf("FAIL ITERATION\n");
+        printf("REJET\n");
+        exit(1); 
+    }
     match(SYMBOL, ")");
     statement(); 
 }
@@ -542,9 +589,19 @@ void return_stmt_prime(void) {
     debug("return-stmt`");
 
     if (compareToken(SYMBOL, ";")) {
+        if (table->context->type != VOID) {
+            printf("REJECT\n"); 
+            exit(1); 
+        }
+        latestReturn = VOID; 
         match(SYMBOL, ";");
     } else {
-        expression(); 
+        TYPE type = expression(); 
+        if (type == table->context->type) {
+            latestReturn = type; 
+        } else {
+            invalidReturn = true; 
+        }
         match(SYMBOL, ";"); 
     }
 }
@@ -556,12 +613,15 @@ TYPE expression(void) {
     if (compareToken(NUM, NULL)) {
         match(NUM, NULL); 
         TYPE t1 = term_prime(INT); 
+        printf("t1: %d\n", t1); 
         TYPE t2 = additive_expression_prime(t1); 
+        printf("t2: %d\n", t2); 
         TYPE t3 = simple_expression_prime(t2);
 
-        if (t3 == ERROR) {
+        if (t3 == ERRORTYPE) {
+            printf("in this one?\n");
             printf("Expression error\n");
-            prinf("REJECT\n"); 
+            printf("REJECT\n"); 
             exit(1); 
         }
 
@@ -569,17 +629,20 @@ TYPE expression(void) {
 
     } else if (compareToken(ID, NULL)) {
         char *id = match(ID, NULL); 
+        printf("%s\n", id); 
         SYMBOL_ENTRY *entry = lookup_symbol(table, id); 
+
         if (entry == NULL) {
             printf("Expression error - id not found\n");
-            prinf("REJECT\n"); 
+            printf("REJECT\n"); 
             exit(1); 
         }
+        printf("here- %s\n", entry->id); 
         TYPE resType = expression_prime(entry);
 
-        if (resType == ERROR) {
+        if (resType == ERRORTYPE) {
             printf("Expression error\n");
-            prinf("REJECT\n"); 
+            printf("REJECT\n"); 
             exit(1); 
         }
 
@@ -593,9 +656,9 @@ TYPE expression(void) {
         TYPE t3 = additive_expression_prime(t2);
         TYPE t4 = simple_expression_prime(t3);
 
-        if (t4 == ERROR) {
+        if (t4 == ERRORTYPE) {
             printf("Expression error\n");
-            prinf("REJECT\n"); 
+            printf("REJECT\n"); 
             exit(1); 
         }
         return t4;  
@@ -608,53 +671,65 @@ TYPE expression_prime(SYMBOL_ENTRY *entry) {
 
     if (compareToken(SYMBOL, "=")) {
         if (entry->symType != VAR) {
-            return ERROR; 
+            return ERRORTYPE; 
         }
         match(SYMBOL, "=");
         return expression();
+
     } else if (compareToken(SYMBOL, "[")) {
         match(SYMBOL, "[");
         TYPE indexType = expression(); 
         match(SYMBOL, "]");
         if (entry->symType != ARRAY || indexType != INT) {
-            return ERROR; 
+            return ERRORTYPE; 
         }
         return expression_prime_prime(entry); 
+
     } else if (compareToken(SYMBOL, "(")) {
         if (entry->symType != FUNC) {
-            return ERROR; 
+            return ERRORTYPE; 
         }
+    
         match(SYMBOL, "(");
         bool argsMatched = args(entry);
+        printf("argsmatched: %d\n", argsMatched);
         match(SYMBOL, ")");
 
         if (!argsMatched) {
-            return ERROR; 
+            return ERRORTYPE; 
         }
 
         TYPE t1 = term_prime(entry->type);
         TYPE t2 = additive_expression_prime(t1); 
         TYPE t3 = simple_expression_prime(t2);
         return t3; 
-        
+
     } else {
-        term_prime();
-        additive_expression_prime();
-        simple_expression_prime();
+        TYPE t1 = term_prime(entry->type);
+        TYPE t2 = additive_expression_prime(t1);
+        printf("t2  %d\n", t2);
+        TYPE t3 = simple_expression_prime(t2);
+        printf("t3 %d\n", t3);
+        return t3; 
     }
 }
 
 //Also used for identifiers 
-void expression_prime_prime(void) {
+TYPE expression_prime_prime(SYMBOL_ENTRY *entry) {
     debug("expression``");
 
     if (compareToken(SYMBOL, "=")) {
         match(SYMBOL, "=");
-        expression();
+        TYPE type = expression();
+        if (type != entry->type) {
+            return ERRORTYPE; 
+        } else {
+            return type; 
+        }
     } else {
-        term_prime(); 
-        additive_expression_prime();
-        simple_expression_prime(); 
+        TYPE t1 = term_prime(entry->type); 
+        TYPE t2 = additive_expression_prime(t1);
+        return simple_expression_prime(t2); 
     }
 }
 
@@ -663,17 +738,20 @@ TYPE simple_expression_prime(TYPE type) {
 
     if (compareToken(SYMBOL, "<=") || compareToken(SYMBOL, "<") || compareToken(SYMBOL, ">") || compareToken(SYMBOL, ">=")
     || compareToken(SYMBOL, "==") || compareToken(SYMBOL, "!=")) {
-        if (type == VOID || type == ERROR) {
-            return ERROR; 
+        if (type == VOID || type == ERRORTYPE) {
+            return ERRORTYPE; 
         }
+        printf("Relative\n");
         relop(); 
 
-        TYPE type = additive_expression();
+        TYPE typeRes = additive_expression();
 
-        if (type == ERROR || VOID) {
-            return ERROR; 
+        printf("the type %d\n", typeRes);
+        if (typeRes == ERRORTYPE || typeRes == VOID) {
+            printf("How???\n"); 
+            return ERRORTYPE; 
         } else {
-            return type; 
+            return typeRes; 
         }
     }
 
@@ -708,16 +786,21 @@ TYPE additive_expression(void) {
 
 TYPE additive_expression_prime(TYPE type) {
     debug("additive-expression`");
-
+    printf("Here again with type: %d\n", type); 
     if (compareToken(SYMBOL, "+") || compareToken(SYMBOL, "-")) {
-        if (type == VOID || type == ERROR) {
-            return ERROR; 
+        if (type == VOID || type == ERRORTYPE) {
+            return ERRORTYPE; 
         }
 
         addop();
+
         TYPE termType = term(); 
-        if (termType == VOID || ERROR) {
-            return ERROR; 
+
+        printf("%d\n", termType); 
+
+        if (termType == VOID || termType == ERRORTYPE) {
+            printf("This is bad\n"); 
+            return ERRORTYPE; 
         }
 
         TYPE type2 = additive_expression_prime(termType); 
@@ -751,14 +834,14 @@ TYPE term_prime(TYPE type) {
     debug("term`");
 
     if (compareToken(SYMBOL, "*") || compareToken(SYMBOL, "/")) {
-        if (type == VOID || type == ERROR) {
-            return ERROR; 
+        if (type == VOID || type == ERRORTYPE) {
+            return ERRORTYPE; 
         }
         mulop();
         //result of this must be an int! 
         TYPE factorType = factor();
-        if (factorType == VOID || ERROR) {
-            return ERROR; 
+        if (factorType == VOID || factorType == ERRORTYPE) {
+            return ERRORTYPE; 
         }
 
         return term_prime(factorType);
@@ -789,7 +872,7 @@ TYPE factor(void) {
         char *id = match(ID, NULL); 
         SYMBOL_ENTRY *entry = lookup_symbol(table, id); 
         if (entry == NULL) {
-            return ERROR; 
+            return ERRORTYPE; 
         }
         TYPE type = factor_prime(entry); 
         return type; 
@@ -806,27 +889,28 @@ TYPE factor_prime(SYMBOL_ENTRY *entry) {
 
     if (compareToken(SYMBOL, "[")) {
         if (entry->symType != ARRAY) {
-            return ERROR; 
+            return ERRORTYPE; 
         }
 
         match(SYMBOL, "[");
         TYPE type = expression(); 
         if (type != INT) {
-            return ERROR; 
+            return ERRORTYPE; 
         }
         match(SYMBOL, "]");
         return entry->type; 
     } else if (compareToken(SYMBOL, "(")) {
         if (entry->symType != FUNC) {
-            return ERROR; 
+            return ERRORTYPE; 
         }
+        printf("here: %d\n", entry->id);
         match(SYMBOL, "(");
         bool paramsMatch = args(entry); 
         match(SYMBOL, ")");
         if (paramsMatch) {
             return entry->type; 
         } else {
-            return ERROR; 
+            return ERRORTYPE; 
         }
     }
 }
@@ -850,6 +934,7 @@ bool arg_list(SYMBOL_ENTRY *entry) {
 
     TYPE type = expression(); 
     if (type == entry->arguments->type) {
+        printf("%s\n", entry->arguments->arguments->id ); 
         return arg_list_prime(entry->arguments->arguments); 
     } else {
         return false; 
@@ -862,7 +947,7 @@ bool arg_list_prime(SYMBOL_ENTRY *entry) {
     if (compareToken(SYMBOL, ",")) {
         match(SYMBOL, ","); 
         TYPE type = expression(); 
-        if (type == entry->type) {
+        if (entry != NULL && type == entry->type) {
             return arg_list_prime(entry->arguments); 
         } else {
             return false; 
@@ -870,6 +955,7 @@ bool arg_list_prime(SYMBOL_ENTRY *entry) {
     }
 
     if (entry == NULL) {
+        printf("hereeee\n"); 
         return true; 
     } else {
         return false; 
