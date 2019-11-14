@@ -555,41 +555,88 @@ TYPE expression(void) {
         // ( ID NUM use this for expression
     if (compareToken(NUM, NULL)) {
         match(NUM, NULL); 
-        term_prime(); 
-        additive_expression_prime(); 
-        simple_expression_prime(); 
+        TYPE t1 = term_prime(INT); 
+        TYPE t2 = additive_expression_prime(t1); 
+        TYPE t3 = simple_expression_prime(t2);
+
+        if (t3 == ERROR) {
+            printf("Expression error\n");
+            prinf("REJECT\n"); 
+            exit(1); 
+        }
+
+        return t3;  
+
     } else if (compareToken(ID, NULL)) {
-        match(ID, NULL); 
-        expression_prime(); 
+        char *id = match(ID, NULL); 
+        SYMBOL_ENTRY *entry = lookup_symbol(table, id); 
+        if (entry == NULL) {
+            printf("Expression error - id not found\n");
+            prinf("REJECT\n"); 
+            exit(1); 
+        }
+        TYPE resType = expression_prime(entry);
+
+        if (resType == ERROR) {
+            printf("Expression error\n");
+            prinf("REJECT\n"); 
+            exit(1); 
+        }
+
+        return resType; 
+
     } else {
         match(SYMBOL, "(");
-        expression();
+        TYPE t1 = expression();
         match(SYMBOL, ")");
-        term_prime(); 
-        additive_expression_prime();
-        simple_expression_prime(); 
+        TYPE t2 = term_prime(t1); 
+        TYPE t3 = additive_expression_prime(t2);
+        TYPE t4 = simple_expression_prime(t3);
+
+        if (t4 == ERROR) {
+            printf("Expression error\n");
+            prinf("REJECT\n"); 
+            exit(1); 
+        }
+        return t4;  
     }
 }
 
 //USED FOR identifiers!
-void expression_prime(void) {
+TYPE expression_prime(SYMBOL_ENTRY *entry) {
     debug("expression`");
 
     if (compareToken(SYMBOL, "=")) {
+        if (entry->symType != VAR) {
+            return ERROR; 
+        }
         match(SYMBOL, "=");
-        expression();
+        return expression();
     } else if (compareToken(SYMBOL, "[")) {
         match(SYMBOL, "[");
-        expression(); 
+        TYPE indexType = expression(); 
         match(SYMBOL, "]");
-        expression_prime_prime(); 
+        if (entry->symType != ARRAY || indexType != INT) {
+            return ERROR; 
+        }
+        return expression_prime_prime(entry); 
     } else if (compareToken(SYMBOL, "(")) {
+        if (entry->symType != FUNC) {
+            return ERROR; 
+        }
         match(SYMBOL, "(");
-        args();
+        bool argsMatched = args(entry);
         match(SYMBOL, ")");
-        term_prime();
-        additive_expression_prime(); 
-        simple_expression_prime(); 
+
+        if (!argsMatched) {
+            return ERROR; 
+        }
+
+        TYPE t1 = term_prime(entry->type);
+        TYPE t2 = additive_expression_prime(t1); 
+        TYPE t3 = simple_expression_prime(t2);
+        return t3; 
+        
     } else {
         term_prime();
         additive_expression_prime();
@@ -611,14 +658,26 @@ void expression_prime_prime(void) {
     }
 }
 
-TYPE simple_expression_prime(void) {
+TYPE simple_expression_prime(TYPE type) {
     debug("simple-expression`");
 
     if (compareToken(SYMBOL, "<=") || compareToken(SYMBOL, "<") || compareToken(SYMBOL, ">") || compareToken(SYMBOL, ">=")
     || compareToken(SYMBOL, "==") || compareToken(SYMBOL, "!=")) {
+        if (type == VOID || type == ERROR) {
+            return ERROR; 
+        }
         relop(); 
-        additive_expression();
+
+        TYPE type = additive_expression();
+
+        if (type == ERROR || VOID) {
+            return ERROR; 
+        } else {
+            return type; 
+        }
     }
+
+    return type; 
 }
 
 void relop(void) {
@@ -639,21 +698,34 @@ void relop(void) {
     }
 }
 
-void additive_expression(void) {
+TYPE additive_expression(void) {
     debug("additive-expression"); 
 
-    term();
-    additive_expression_prime(); 
+    TYPE type1 = term();
+    TYPE type2 = additive_expression_prime(type1); 
+    return type2; 
 }
 
-void additive_expression_prime(void) {
+TYPE additive_expression_prime(TYPE type) {
     debug("additive-expression`");
 
     if (compareToken(SYMBOL, "+") || compareToken(SYMBOL, "-")) {
+        if (type == VOID || type == ERROR) {
+            return ERROR; 
+        }
+
         addop();
-        term(); 
-        additive_expression_prime(); 
+        TYPE termType = term(); 
+        if (termType == VOID || ERROR) {
+            return ERROR; 
+        }
+
+        TYPE type2 = additive_expression_prime(termType); 
+        return type2; 
     }
+
+    return type; 
+
 }
 
 void addop(void) {
@@ -666,21 +738,33 @@ void addop(void) {
     }
 }
 
-void term(void) {
+TYPE term(void) {
     debug("term");
 
-    factor();
-    term_prime();
+    TYPE type1 = factor();
+    TYPE type2 = term_prime(type1);
+
+    return type2; 
 }
 
-void term_prime(void) {
+TYPE term_prime(TYPE type) {
     debug("term`");
 
     if (compareToken(SYMBOL, "*") || compareToken(SYMBOL, "/")) {
+        if (type == VOID || type == ERROR) {
+            return ERROR; 
+        }
         mulop();
-        factor();
-        term_prime();
+        //result of this must be an int! 
+        TYPE factorType = factor();
+        if (factorType == VOID || ERROR) {
+            return ERROR; 
+        }
+
+        return term_prime(factorType);
     }
+
+    return type; 
 }
 
 void mulop(void) {
@@ -708,6 +792,7 @@ TYPE factor(void) {
             return ERROR; 
         }
         TYPE type = factor_prime(entry); 
+        return type; 
     } else {
         match(SYMBOL, "(");
         TYPE type = expression(); 
@@ -715,6 +800,7 @@ TYPE factor(void) {
         return type; 
     }
 }
+
 TYPE factor_prime(SYMBOL_ENTRY *entry) {
     debug("factor`");
 
