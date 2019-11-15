@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     }
 
     parse(argv[1]); 
-    printf("SUCCESS\n"); 
+    printf("ACCEPT\n"); 
     return 0; 
 }
 
