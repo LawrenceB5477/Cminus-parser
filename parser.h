@@ -5,7 +5,7 @@
 
 typedef enum {VAR, FUNC, ARRAY} SYMBOL_TYPE; 
 
-typedef enum {INT, VOID, ERRORTYPE} TYPE; 
+typedef enum {INT, VOID, ERRORTYPE, INTARRAY} TYPE; 
 
 typedef struct SYMBOL_STRUCT_ENTRY {
     char *id; 
