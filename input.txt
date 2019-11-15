@@ -1,3 +1,4 @@
+ 
 int x[10];
 
 
@@ -30,13 +31,11 @@ void sort( int a[], int low, int high)
     }
 }
 
-int thing[30];
 
 void main(void)
 {   
     int i; 
     i = 0; 
-    thing[3];
 
     while (i < 10) 
         { x[i];
@@ -49,4 +48,3 @@ void main(void)
         i = i + 1; 
     }
 }
-

@@ -617,7 +617,7 @@ TYPE expression(void) {
         char *id = match(ID, NULL); 
         SYMBOL_ENTRY *entry = lookup_symbol(table, id); 
 
-        if (entry == NULL || entry->symType == FUNC) {
+        if (entry == NULL ) {
             printf("REJECT\n"); 
             exit(1); 
         }
