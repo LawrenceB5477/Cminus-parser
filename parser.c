@@ -307,8 +307,6 @@ void declaration(void) {
     SYMBOL_ENTRY *entry = create_symbol(id, 0, type, NULL); 
     declaration_prime(entry); 
 
-    print_symbol_table(table); 
-
     //Void variables, not possible 
     if (type == VOID && entry->symType != FUNC) {
         //printf("Cannot have void variables!\n"); 
@@ -364,7 +362,6 @@ void var_declaration(void) {
 
     SYMBOL_ENTRY *entry = create_symbol(id, VAR, type, NULL); 
     var_declaration_prime(entry); 
-    print_symbol_table(table);
 } 
 
 void var_declaration_prime(SYMBOL_ENTRY *entry) {
@@ -472,19 +469,12 @@ void compound_stmt(SYMBOL_ENTRY *entry) {
     SYMBOL_ENTRY *walk = entry->arguments; 
     while (walk != NULL && walk->type != VOID) {
         insert_sym_table(table, copy_symbol(walk)); 
-        printf("Here!\n");
         walk = walk->arguments; 
     } 
 
-
-    print_symbol_table(table);
-
     local_declarations(); 
 
-    printf("Here ya go\n");
-
     statement_list(); 
-
 
     table = pop_symbol_table(table); 
     match(SYMBOL, "}");
@@ -637,7 +627,6 @@ TYPE expression(void) {
         }
         TYPE resType = expression_prime(entry);
 
-        printf("Res type: %d\n", resType);
         if (resType == ERRORTYPE) {
             printf("REJECT\n"); 
             exit(1); 
@@ -713,7 +702,6 @@ TYPE expression_prime(SYMBOL_ENTRY *entry) {
             TYPE t1 = term_prime(VOID);
             TYPE t2 = additive_expression_prime(t1);
             TYPE t3 = simple_expression_prime(t2);
-            printf("T3: %d\n", t3); 
             if (t3 != VOID) {
                 printf("REJECT\n");
                 exit(1); 
@@ -724,7 +712,6 @@ TYPE expression_prime(SYMBOL_ENTRY *entry) {
             TYPE t1 = term_prime(entry->type);
             TYPE t2 = additive_expression_prime(t1);
             TYPE t3 = simple_expression_prime(t2);
-            printf("T3: %d\n", t3); 
             return t3; 
         }
       
