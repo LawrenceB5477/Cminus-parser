@@ -10,7 +10,7 @@ typedef enum {INT, VOID, ERRORTYPE, INTARRAY} TYPE;
 typedef struct SYMBOL_STRUCT_ENTRY {
     char *id; 
     SYMBOL_TYPE symType; 
-    TYPE type; 
+    TYPE type;
     struct SYMBOL_STRUCT_ENTRY *arguments; 
     struct SYMBOL_STRUCT_ENTRY *sibling; 
 } SYMBOL_ENTRY; 
@@ -43,7 +43,7 @@ void statement_list(void);
 void statement(void); 
 void expression_stmt(void); 
 void selection_stmt(void);
-void selection_stmt_prime(void);
+void selection_stmt_prime(int );
 void iteration_stmt(void);
 void return_stmt(void);
 void return_stmt_prime(void);

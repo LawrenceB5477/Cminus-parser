@@ -1,6 +1,34 @@
 #include "parser.h"
 
 extern FILE* inputFile; 
+int lineCount = 1; 
+int tempNum = 0; 
+char *lastOperand = NULL; 
+FILE *codeFile = NULL; 
+int bp = 0; 
+int bpArray[200]; 
+typedef enum {
+    CMPL,
+    CMPLE,
+    CMPG,
+    CMPGE,
+    CMPE,
+    CMPNE,
+    CMPNONE
+} CMP_RES;
+
+CMP_RES lastCompare = CMPNONE; 
+
+void set_operand(char *string) {
+    if (lastOperand != NULL) {
+        free(lastOperand); 
+    }
+    if (string != NULL) {
+        lastOperand = malloc(strlen(string) + 1);
+        strcpy(lastOperand, string);
+    }
+}
+
 
 unsigned hash_value(char *id) {
     unsigned hash = 0; 
@@ -204,7 +232,6 @@ bool invalidReturn;
 
 
 char* match(TOKEN token, char *lex) {
-    //printf("Matching: %s\n", lex); 
     if (currentToken->token == token) {
         if (token == SYMBOL || token == KEYWORD) {
             if (strcmp(currentToken->lexeme, lex) != 0) {
@@ -212,7 +239,7 @@ char* match(TOKEN token, char *lex) {
                 exit(1); 
             }
         } 
-        
+         
         char *str = currentToken->lexeme; 
         free(currentToken); 
         currentToken = nextToken(); 
@@ -272,8 +299,49 @@ int compareToken(TOKEN token, const char *string) {
 //Parsing functions 
 void program(void) {
     debug("program"); 
-
+    codeFile = fopen("tempcodegen", "w"); 
+    if (codeFile == NULL) {
+        printf("REJECT\n");
+        exit(1); 
+    }
     declaration_list(); 
+    fclose(codeFile); 
+    FILE *tempInput =  fopen("tempcodegen", "r");  
+    FILE *codeOut = fopen("codegen", "w"); 
+
+    if (tempInput == NULL || codeOut == NULL) {
+        printf("REJECT\n");
+        exit(1); 
+    }
+
+    char buffer[100]; 
+    while (fgets(buffer, 100, tempInput) != NULL) {
+        char *bpPos = strstr(buffer, "bp"); 
+        char number[20]; 
+        
+
+        if (strstr(buffer, "jmp") != NULL && bpPos != NULL) {
+            char *walk = bpPos + 2; 
+            int index = 0;
+            while (*walk) {
+                number[index] = *walk; 
+                index++; 
+                walk++; 
+            }
+            number[index] = '\0'; 
+            int bpNumber = atoi(number); 
+            int bufSize = bpPos - buffer; 
+            char outBuffer[bufSize + 1]; 
+            strncpy(outBuffer, buffer, bufSize);
+            outBuffer[bufSize] = '\0'; 
+            outBuffer[strlen(outBuffer) + 1] = '\0';
+            fprintf(codeOut, "%s%d\n", outBuffer, bpArray[bpNumber]); 
+        } else {
+            fputs(buffer, codeOut); 
+        }
+    }
+    fclose(tempInput); 
+    fclose(codeOut); 
 }
 
 void declaration_list(void) {
@@ -327,9 +395,9 @@ void declaration(void) {
         latestReturn = ERROR; 
     }
 
+    // add declaration here 
+
     latestDeclaration = entry;
-
-
 }
 
 void declaration_prime(SYMBOL_ENTRY *entry) {
@@ -341,8 +409,41 @@ void declaration_prime(SYMBOL_ENTRY *entry) {
         match(SYMBOL, "(");
         params(entry); 
         match(SYMBOL, ")");
+       
+        //print the function 
+        char *functype = NULL; 
+        if (entry->type == INT) {
+            functype = "int"; 
+        } else {
+            functype = "void"; 
+        }
 
+        //get argument information 
+        int argCount = 0; 
+        if (entry->arguments->type != VOID) {
+            SYMBOL_ENTRY *walk = entry->arguments; 
+            while (walk != NULL) {
+                argCount++; 
+                walk = walk->arguments; 
+            }
+        }
+
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10d\n", lineCount++, "func", entry->id, functype, argCount); 
+        
+        if (entry->arguments->type != VOID) {
+            SYMBOL_ENTRY *walk = entry->arguments; 
+            while (walk != NULL) {
+                fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "param", "", "", walk->id); 
+                walk = walk->arguments; 
+            }
+            walk = entry->arguments; 
+            while (walk != NULL) {
+                fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "alloc", "4", "", walk->id); 
+                walk = walk->arguments; 
+            }
+        }
         compound_stmt(entry);            
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "end", entry->id, "", ""); 
     } else {
         var_declaration_prime(entry); 
     }
@@ -370,18 +471,24 @@ void var_declaration_prime(SYMBOL_ENTRY *entry) {
      if (compareToken(SYMBOL, ";")) {
         match(SYMBOL, ";"); 
         entry->symType = VAR; 
-            insert_sym_table(table, entry); 
-
+        insert_sym_table(table, entry); 
+        
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "alloc", "4", "", entry->id); 
 
     } else {
         match(SYMBOL, "[");
-        match(NUM, NULL); 
+        char *num = match(NUM, NULL); 
         match(SYMBOL, "]");
         match(SYMBOL, ";"); 
         entry->symType = ARRAY; 
             insert_sym_table(table, entry); 
+        
+        int numb = atoi(num); 
+        numb *= 4; 
 
+        fprintf(codeFile, "%-5d %-10s %-10d %-10s %-10s\n", lineCount++, "alloc", numb, "", entry->id); 
     }
+
 } 
 
 TYPE type_specifier(void) {
@@ -458,11 +565,12 @@ void param_prime(SYMBOL_ENTRY *param) {
 
 // ------------------- HOLD THE LINE ----------------
 
-//Creates a new symbol table and pops it when it's done with it!
+//DONE
 void compound_stmt(SYMBOL_ENTRY *entry) {
     debug("compound-stmt");
 
     match(SYMBOL, "{");
+    fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "block", "", "", ""); 
 
     table = push_symbol_table(table, copy_symbol(entry));
 
@@ -477,9 +585,12 @@ void compound_stmt(SYMBOL_ENTRY *entry) {
     statement_list(); 
 
     table = pop_symbol_table(table); 
+
+    fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++,  "end block", "", "", ""); 
     match(SYMBOL, "}");
 }
 
+//DONE
 void local_declarations(void) {
     debug("local-declarations"); 
 
@@ -489,6 +600,7 @@ void local_declarations(void) {
     }
 }
 
+//DONE
 void statement_list(void) {
     debug("statement-list");
 
@@ -522,7 +634,7 @@ void statement(void) {
     }
 }
 
-//IGNORE RETURN VALUE OF EXPRESSION STMT
+//DONE
 void expression_stmt(void) {
     debug("expression-stmt");
 
@@ -545,16 +657,38 @@ void selection_stmt(void) {
         exit(1); 
     }
     match(SYMBOL, ")");
+
+    int saveBp1 = bp; 
+    if (lastCompare == CMPL) {
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmpl", lastOperand, "", bp++); 
+    } else if (lastCompare == CMPLE) {
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmple", lastOperand, "", bp++); 
+    } else if (lastCompare == CMPG) {
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmpg", lastOperand, "", bp++); 
+    } else if (lastCompare == CMPGE) {
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmpge", lastOperand, "", bp++); 
+    } else if (lastCompare == CMPE) {
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmpe", lastOperand, "", bp++); 
+    } else if (lastCompare == CMPNE) {
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmpne", lastOperand, "", bp++); 
+    }
+
     statement(); 
-    selection_stmt_prime(); 
+    int saveBp = bp; 
+    fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmp", "", "", bp++); 
+    
+    int elseline = lineCount; 
+    bpArray[saveBp1] = elseline;
+    selection_stmt_prime(saveBp); 
 }
 
-void selection_stmt_prime(void) {
+void selection_stmt_prime(int bp) {
     debug("selection-stmt`");
     
     if (compareToken(KEYWORD, "else")) {
         match(KEYWORD, "else");
         statement(); 
+        bpArray[bp] = lineCount;
     }
 }
 
@@ -563,15 +697,41 @@ void iteration_stmt(void) {
 
     match(KEYWORD, "while"); 
     match(SYMBOL, "(");
+    int startWhile = lineCount; 
+
     TYPE type = expression(); 
     if (type != INT) {
         printf("REJECT\n");
         exit(1); 
     }
     match(SYMBOL, ")");
+    if (lastCompare == CMPNONE) {
+        printf("REJECT\n"); 
+        exit(1); 
+    }
+
+    int saveBp = bp; 
+
+    if (lastCompare == CMPL) {
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmpl", lastOperand, "", bp++); 
+    } else if (lastCompare == CMPLE) {
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmple", lastOperand, "", bp++); 
+    } else if (lastCompare == CMPG) {
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmpg", lastOperand, "", bp++); 
+    } else if (lastCompare == CMPGE) {
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmpge", lastOperand, "", bp++); 
+    } else if (lastCompare == CMPE) {
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmpe", lastOperand, "", bp++); 
+    } else if (lastCompare == CMPNE) {
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s bp%-8d\n", lineCount++, "jmpne", lastOperand, "", bp++); 
+    }
+
     statement(); 
+    fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10d\n", lineCount++, "jmp", "", "", startWhile); 
+    bpArray[saveBp] = lineCount;
 }
 
+//RETURN
 void return_stmt(void) {
     debug("return-stmt"); 
 
@@ -579,6 +739,7 @@ void return_stmt(void) {
     return_stmt_prime(); 
 }
 
+//DONE
 void return_stmt_prime(void) {
     debug("return-stmt`");
 
@@ -588,6 +749,8 @@ void return_stmt_prime(void) {
             exit(1); 
         }
         latestReturn = VOID; 
+
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "return", "", "", ""); 
         match(SYMBOL, ";");
     } else {
         TYPE type = expression(); 
@@ -596,16 +759,19 @@ void return_stmt_prime(void) {
         } else {
             invalidReturn = true; 
         }
+
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "return", "", "", lastOperand); 
         match(SYMBOL, ";"); 
     }
 }
 
+//DONE
 TYPE expression(void) {
     debug("expression"); 
 
         // ( ID NUM use this for expression
     if (compareToken(NUM, NULL)) {
-        match(NUM, NULL); 
+        set_operand(match(NUM, NULL)); 
         TYPE t1 = term_prime(INT); 
         TYPE t2 = additive_expression_prime(t1); 
         TYPE t3 = simple_expression_prime(t2);
@@ -625,6 +791,9 @@ TYPE expression(void) {
             printf("REJECT\n"); 
             exit(1); 
         }
+
+        //TODO here 
+        set_operand(id); 
         TYPE resType = expression_prime(entry);
 
         if (resType == ERRORTYPE) {
@@ -650,7 +819,7 @@ TYPE expression(void) {
     }
 }
 
-//USED FOR identifiers!
+//DONE
 TYPE expression_prime(SYMBOL_ENTRY *entry) {
     debug("expression`");
 
@@ -658,20 +827,52 @@ TYPE expression_prime(SYMBOL_ENTRY *entry) {
         if (entry->symType != VAR) {
             return ERRORTYPE; 
         }
+        char op1[strlen(lastOperand) + 1];
+        strcpy(op1, lastOperand); 
+
         match(SYMBOL, "=");
         TYPE res = expression();
         if (res == VOID || res == ERROR || res == INTARRAY) {
             printf("REJECT\n");
             exit(1); 
         }
+
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "assign", lastOperand, "", op1); 
         return res; 
     } else if (compareToken(SYMBOL, "[")) {
+        char op1[strlen(lastOperand) + 1];
+        strcpy(op1, lastOperand); 
+
         match(SYMBOL, "[");
         TYPE indexType = expression(); 
         match(SYMBOL, "]");
+        
+        
+        //code gen 
+        char tempName[7];
+        strcpy(tempName, "_t"); 
+        char num[5]; 
+        snprintf(num, 7, "%d", tempNum++); 
+        strcat(tempName, num);
+
         if (entry->symType != ARRAY || indexType != INT) {
             return ERRORTYPE; 
         }
+
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "mul", lastOperand, "4", tempName);
+        set_operand(tempName); 
+
+
+        char tempName2[7];
+        strcpy(tempName2, "_t"); 
+        char num2[5]; 
+        snprintf(num2, 7, "%d", tempNum++); 
+        strcat(tempName2, num2);
+
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "disp", op1, lastOperand, tempName2);
+
+        set_operand(tempName2); 
+
         return expression_prime_prime(entry); 
 
     } else if (compareToken(SYMBOL, "(")) {
@@ -679,6 +880,16 @@ TYPE expression_prime(SYMBOL_ENTRY *entry) {
             return ERRORTYPE; 
         }
     
+        int argCount = 0; 
+        SYMBOL_ENTRY *walk = entry->arguments; 
+        while (walk != NULL) {
+            argCount++; 
+            walk = walk->arguments; 
+        }
+
+        char op1[strlen(lastOperand) + 1];
+        strcpy(op1, lastOperand);
+
         match(SYMBOL, "(");
         bool argsMatched = args(entry);
         match(SYMBOL, ")");
@@ -686,6 +897,15 @@ TYPE expression_prime(SYMBOL_ENTRY *entry) {
         if (!argsMatched) {
             return ERRORTYPE; 
         }
+
+        char tempName[7];
+        strcpy(tempName, "_t");
+        char num[5];
+        snprintf(num, 5, "%d", tempNum++);
+        strcat(tempName, num);
+
+        fprintf(codeFile, "%-5d %-10s %-10s %-10d %-10s\n", lineCount++, "call", op1, argCount, tempName);
+        set_operand(tempName); 
 
         TYPE t1 = term_prime(entry->type);
         TYPE t2 = additive_expression_prime(t1); 
@@ -718,16 +938,22 @@ TYPE expression_prime(SYMBOL_ENTRY *entry) {
     }
 }
 
-//Also used for identifiers 
+//DONE 
 TYPE expression_prime_prime(SYMBOL_ENTRY *entry) {
     debug("expression``");
 
     if (compareToken(SYMBOL, "=")) {
         match(SYMBOL, "=");
+
+        char op1[strlen(lastOperand) + 1];
+        strcpy(op1, lastOperand); 
+
         TYPE type = expression();
+
         if (type != entry->type) {
             return ERRORTYPE; 
         } else {
+            fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "assign", lastOperand, "", op1); 
             return type; 
         }
     } else {
@@ -737,6 +963,7 @@ TYPE expression_prime_prime(SYMBOL_ENTRY *entry) {
     }
 }
 
+//DONE
 TYPE simple_expression_prime(TYPE type) {
     debug("simple-expression`");
 
@@ -745,6 +972,9 @@ TYPE simple_expression_prime(TYPE type) {
         if (type == VOID || type == ERRORTYPE) {
             return ERRORTYPE; 
         }
+        char op1[strlen(lastOperand) + 1];
+        strcpy(op1, lastOperand); 
+
         relop(); 
 
         TYPE typeRes = additive_expression();
@@ -752,6 +982,15 @@ TYPE simple_expression_prime(TYPE type) {
         if (typeRes == ERRORTYPE || typeRes == VOID) {
             return ERRORTYPE; 
         } else {
+
+            char tempName[7];
+            strcpy(tempName, "_t"); 
+            char num[5]; 
+            snprintf(num, 7, "%d", tempNum++); 
+            strcat(tempName, num);
+        
+            fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "comp", op1, lastOperand, tempName); 
+            set_operand(tempName); 
             return typeRes; 
         }
     }
@@ -759,24 +998,32 @@ TYPE simple_expression_prime(TYPE type) {
     return type; 
 }
 
+//DONE
 void relop(void) {
     debug("relop");
 
     if (compareToken(SYMBOL, "<=")) {
+        lastCompare = CMPG;
         match(SYMBOL, "<=");
     } else if (compareToken(SYMBOL, "<")) {
+        lastCompare = CMPGE;
         match(SYMBOL, "<");
     } else if (compareToken(SYMBOL, ">")) {
+        lastCompare = CMPLE;
         match(SYMBOL, ">"); 
     } else if (compareToken(SYMBOL, ">=")) {
+        lastCompare = CMPL;
         match(SYMBOL, ">=");
     } else if (compareToken(SYMBOL, "==")) {
+        lastCompare = CMPNE;
         match(SYMBOL, "=="); 
     } else {
+        lastCompare = CMPE;
         match(SYMBOL, "!=");
     }
 }
 
+//DONE
 TYPE additive_expression(void) {
     debug("additive-expression"); 
 
@@ -785,12 +1032,17 @@ TYPE additive_expression(void) {
     return type2; 
 }
 
+//DONE
 TYPE additive_expression_prime(TYPE type) {
     debug("additive-expression`");
     if (compareToken(SYMBOL, "+") || compareToken(SYMBOL, "-")) {
         if (type == VOID || type == ERRORTYPE) {
             return ERRORTYPE; 
         }
+        
+        bool add = compareToken(SYMBOL, "+"); 
+        char op1[strlen(lastOperand) + 1];
+        strcpy(op1, lastOperand); 
 
         addop();
 
@@ -800,6 +1052,21 @@ TYPE additive_expression_prime(TYPE type) {
             return ERRORTYPE; 
         }
 
+        //code gen 
+        char tempName[7];
+        strcpy(tempName, "_t"); 
+        char num[5]; 
+        snprintf(num, 7, "%d", tempNum++); 
+        strcat(tempName, num);
+        
+        if (add) {
+            fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "add", op1, lastOperand, tempName); 
+        } else {
+            fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "sub", op1, lastOperand, tempName); 
+        }
+
+        set_operand(tempName); 
+
         TYPE type2 = additive_expression_prime(termType); 
         return type2; 
     }
@@ -808,6 +1075,7 @@ TYPE additive_expression_prime(TYPE type) {
 
 }
 
+//DONE
 void addop(void) {
     debug("addop");
 
@@ -818,6 +1086,7 @@ void addop(void) {
     }
 }
 
+//DONE
 TYPE term(void) {
     debug("term");
 
@@ -827,26 +1096,46 @@ TYPE term(void) {
     return type2; 
 }
 
+//DONE
 TYPE term_prime(TYPE type) {
     debug("term`");
 
     if (compareToken(SYMBOL, "*") || compareToken(SYMBOL, "/")) {
+        bool mul = compareToken(SYMBOL, "*"); 
         if (type == VOID || type == ERRORTYPE) {
             return ERRORTYPE; 
         }
+        char op1[strlen(lastOperand) + 1];
+        strcpy(op1, lastOperand); 
+        
         mulop();
         //result of this must be an int! 
         TYPE factorType = factor();
         if (factorType == VOID || factorType == ERRORTYPE) {
             return ERRORTYPE; 
+        
+        }
+        char tempName[7];
+        strcpy(tempName, "_t");
+        char num[5];
+        snprintf(num, 7, "%d", tempNum++);
+        strcat(tempName, num);
+
+        //generate mulop code! 
+        if (mul) {
+            fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "mul", op1, lastOperand, tempName);
+        } else {
+            fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "div", op1, lastOperand, tempName);
         }
 
+        set_operand(tempName); 
         return term_prime(factorType);
     }
 
     return type; 
 }
 
+//DONE
 void mulop(void) {
     debug("mulop");
 
@@ -858,12 +1147,14 @@ void mulop(void) {
 }
 
 
-//Actual values! 
+//DONE
 TYPE factor(void) {
     debug("factor");
 
     if (compareToken(NUM, NULL)) {
-        match(NUM, NULL); 
+        char *res = match(NUM, NULL); 
+        set_operand(res);
+
         return INT; 
     } else if (compareToken(ID, NULL)) {
         char *id = match(ID, NULL); 
@@ -871,6 +1162,8 @@ TYPE factor(void) {
         if (entry == NULL) {
             return ERRORTYPE; 
         }
+
+        set_operand(id); 
         TYPE type = factor_prime(entry); 
         return type; 
     } else {
@@ -881,13 +1174,18 @@ TYPE factor(void) {
     }
 }
 
+//DONE
 TYPE factor_prime(SYMBOL_ENTRY *entry) {
     debug("factor`");
+    
 
     if (compareToken(SYMBOL, "[")) {
         if (entry->symType != ARRAY) {
             return ERRORTYPE; 
         }
+
+        char op1[strlen(lastOperand) + 1];
+        strcpy(op1, lastOperand);
 
         match(SYMBOL, "[");
         TYPE type = expression(); 
@@ -895,15 +1193,52 @@ TYPE factor_prime(SYMBOL_ENTRY *entry) {
             return ERRORTYPE; 
         }
         match(SYMBOL, "]");
+
+        char tempName[7];
+        strcpy(tempName, "_t");
+        char num[5];
+        snprintf(num, 5, "%d", tempNum++);
+        strcat(tempName, num);
+        
+        fprintf(codeFile, "%-5d %-10s %-10s %-10d %-10s\n", lineCount++, "mul", lastOperand, 4, tempName);
+        set_operand(tempName);
+  
+        char tempName2[7];
+        strcpy(tempName2, "_t");
+        char num2[5];
+        snprintf(num2, 7, "%d", tempNum++);
+        strcat(tempName2, num2);
+ 
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "disp", op1, lastOperand, tempName2);
+ 
+        set_operand(tempName2);
         return entry->type; 
     } else if (compareToken(SYMBOL, "(")) {
         if (entry->symType != FUNC) {
             return ERRORTYPE; 
         }
+        SYMBOL_ENTRY *walk = entry->arguments;
+        int argCount = 0; 
+        while (walk != NULL) {
+            argCount++; 
+            walk = walk->arguments; 
+        }
+
+        char op1[strlen(lastOperand) + 1];
+        strcpy(op1, lastOperand);
+
         match(SYMBOL, "(");
         bool paramsMatch = args(entry); 
         match(SYMBOL, ")");
         if (paramsMatch) {
+            char tempName[7];
+            strcpy(tempName, "_t");
+            char num[5];
+            snprintf(num, 5, "%d", tempNum++);
+            strcat(tempName, num);
+
+            fprintf(codeFile, "%-5d %-10s %-10s %-10d %-10s\n", lineCount++, "call", op1, argCount, tempName);
+            set_operand(tempName); 
             return entry->type; 
         } else {
             return ERRORTYPE; 
@@ -911,6 +1246,7 @@ TYPE factor_prime(SYMBOL_ENTRY *entry) {
     }
 }
 
+//DONE
 bool args(SYMBOL_ENTRY *entry) {
     debug("args");
 
@@ -925,10 +1261,12 @@ bool args(SYMBOL_ENTRY *entry) {
     }
 } 
 
+//DONE
 bool arg_list(SYMBOL_ENTRY *entry) {
     debug("args-list");
 
     TYPE type = expression(); 
+    fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "arg", "", "", lastOperand);
     if ((entry->arguments->symType == ARRAY && type == INTARRAY) || (entry->arguments->symType != ARRAY && type == entry->arguments->type)) {
         return arg_list_prime(entry->arguments->arguments); 
     } else {
@@ -936,12 +1274,14 @@ bool arg_list(SYMBOL_ENTRY *entry) {
     }
 }
 
+//DONE
 bool arg_list_prime(SYMBOL_ENTRY *entry) { 
     debug("arg-list`");
 
     if (compareToken(SYMBOL, ",")) {
         match(SYMBOL, ","); 
         TYPE type = expression(); 
+        fprintf(codeFile, "%-5d %-10s %-10s %-10s %-10s\n", lineCount++, "arg", "", "", lastOperand);
         if (entry != NULL && ((entry->symType != ARRAY && type == entry->type) || (entry->symType == ARRAY && type == INTARRAY))) {
             return arg_list_prime(entry->arguments); 
         } else {

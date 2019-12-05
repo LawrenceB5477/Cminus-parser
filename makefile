@@ -1,2 +1,2 @@
 all:
-	gcc main.c lexer.c parser.c -o main
+	gcc main.c -std=c99 lexer.c parser.c -o main

@@ -1,0 +1,105 @@
+1     alloc      40                    x         
+2     func       minloc     int        3         
+3     param                            a         
+4     param                            low       
+5     param                            high      
+6     alloc      4                     a         
+7     alloc      4                     low       
+8     alloc      4                     high      
+9     block                                      
+10    alloc      4                     i         
+11    alloc      4                     x         
+12    alloc      4                     k         
+13    assign     low                   k         
+14    mul        low        4          _t0       
+15    disp       a          _t0        _t1       
+16    assign     _t1                   x         
+17    add        low        1          _t2       
+18    assign     _t2                   i         
+19    comp       i          high       _t3       
+20    jmpge      _t3                   37
+21    block                                      
+22    mul        i          4          _t4       
+23    disp       a          _t4        _t5       
+24    comp       _t5        x          _t6       
+25    jmpge      _t6                   33
+26    block                                      
+27    mul        i          4          _t7       
+28    disp       a          _t7        _t8       
+29    assign     _t8                   x         
+30    assign     i                     k         
+31    end block                                  
+32    jmp                              0
+33    add        i          1          _t9       
+34    assign     _t9                   i         
+35    end block                                  
+36    jmp                              19        
+37    return                           k         
+38    end block                                  
+39    end        minloc                          
+40    func       sort       void       3         
+41    param                            a         
+42    param                            low       
+43    param                            high      
+44    alloc      4                     a         
+45    alloc      4                     low       
+46    alloc      4                     high      
+47    block                                      
+48    alloc      4                     i         
+49    alloc      4                     k         
+50    assign     low                   i         
+51    sub        high       1          _t10      
+52    comp       i          _t10       _t11      
+53    jmpge      _t11                  77
+54    block                                      
+55    alloc      4                     t         
+56    alloc      4                     i         
+57    arg                              a         
+58    arg                              i         
+59    arg                              high      
+60    call       minloc     3          _t12      
+61    assign     _t12                  k         
+62    mul        k          4          _t13      
+63    disp       a          _t13       _t14      
+64    assign     _t14                  t         
+65    mul        k          4          _t15      
+66    disp       a          _t15       _t16      
+67    mul        i          4          _t17      
+68    disp       a          _t17       _t18      
+69    assign     _t18                  _t16      
+70    mul        i          4          _t19      
+71    disp       a          _t19       _t20      
+72    assign     t                     _t20      
+73    add        i          1          _t21      
+74    assign     _t21                  i         
+75    end block                                  
+76    jmp                              51        
+77    end block                                  
+78    end        sort                            
+79    func       main       void       0         
+80    block                                      
+81    alloc      4                     i         
+82    assign     0                     i         
+83    comp       i          10         _t22      
+84    jmpge      _t22                  92
+85    block                                      
+86    mul        i          4          _t23      
+87    disp       x          _t23       _t24      
+88    add        i          1          _t25      
+89    assign     _t25                  i         
+90    end block                                  
+91    jmp                              83        
+92    arg                              x         
+93    arg                              0         
+94    arg                              10        
+95    call       sort       3          _t26      
+96    assign     0                     i         
+97    comp       i          10         _t27      
+98    jmpge      _t27                  104
+99    block                                      
+100   add        i          1          _t28      
+101   assign     _t28                  i         
+102   end block                                  
+103   jmp                              97        
+104   end block                                  
+105   end        main                            
